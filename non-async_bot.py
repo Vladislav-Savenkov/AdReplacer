@@ -13,32 +13,50 @@ user_data = {}
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Привет! Пока что у меня есть всего две команды:\n /color - перевести изображение в ч/б\n /glue - склеить два фото по заданным координатам")
+    bot.reply_to(message, "Привет! Пока что у меня есть всего две команды:\n /save_ad - сохранить шаблон пользовательской рекламы\n /glue - склеить два фото по заданным координатам")
 
-@bot.message_handler(commands=['color'])
+@bot.message_handler(commands=['save_ad'])
 def color_command(message):
-    user_data[message.chat.id] = {'command': 'color'}
-    bot.reply_to(message, "Отправь мне фото, чтобы я преобразовал его в черно-белое.")
+    user_data[message.chat.id] = {'command': 'save_ad'}
+    bot.reply_to(message, "Отправь мне фото, чтобы я сохранил его как шаблон.")
 
 @bot.message_handler(commands=['glue'])
 def glue_command(message):
     user_data[message.chat.id] = {'command': 'glue', 'photos': [], 'coords': None}
     bot.reply_to(message, "Отправь мне два фото и координаты для вставки первого во второе.")
 
-@bot.message_handler(func=lambda message: 'command' in user_data.get(message.chat.id, {}) and user_data[message.chat.id]['command'] == 'color', content_types=['photo'])
+@bot.message_handler(func=lambda message: 'command' in user_data.get(message.chat.id, {}) and user_data[message.chat.id]['command'] == 'save_ad', content_types=['photo'])
 def handle_color_photo(message):
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
 
-    image = Image.open(BytesIO(downloaded_file))
-    image_bw = image.convert('L')
+    username = message.from_user.username if message.from_user.username else 'unknown_user'
 
-    output = BytesIO()
-    image_bw.save(output, format='JPEG')
-    output.seek(0)
-    bot.send_photo(message.chat.id, photo=output)
+    user_dir = os.path.join('user_photos', username)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
 
+    file_count = len([name for name in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, name))])
+    image_path = os.path.join(user_dir, f'{file_count + 1}.jpg')
+    with open(image_path, 'wb') as file:
+        file.write(downloaded_file)
+
+    bot.reply_to(message, "Шаблон сохранен!")
     del user_data[message.chat.id]
+
+@bot.message_handler(commands=['show_ads'])
+def show_ads(message):
+    username = message.from_user.username if message.from_user.username else 'unknown_user'
+    user_dir = os.path.join('user_photos', username)
+
+    if os.path.exists(user_dir) and os.listdir(user_dir):
+        for index, file_name in enumerate(sorted(os.listdir(user_dir)), start=1):
+            file_path = os.path.join(user_dir, file_name)
+            if os.path.isfile(file_path):
+                with open(file_path, 'rb') as file:
+                    bot.send_photo(message.chat.id, photo=file, caption=f'Шаблон #{index}')
+    else:
+        bot.reply_to(message, "У вас пока нет сохраненных шаблонов.")
 
 @bot.message_handler(func=lambda message: 'command' in user_data.get(message.chat.id, {}) and user_data[message.chat.id]['command'] == 'glue', content_types=['photo'])
 def handle_glue_photo(message):
