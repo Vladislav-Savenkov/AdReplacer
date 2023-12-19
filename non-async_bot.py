@@ -58,6 +58,35 @@ def show_ads(message):
     else:
         bot.reply_to(message, "У вас пока нет сохраненных шаблонов.")
 
+@bot.message_handler(commands=['remove_ad'])
+def remove_ad_command(message):
+    user_data[message.chat.id] = {'command': 'remove_ad'}
+    bot.reply_to(message, "Введите номер фото, которое вы хотите удалить.")
+
+@bot.message_handler(func=lambda message: 'command' in user_data.get(message.chat.id, {}) and user_data[message.chat.id]['command'] == 'remove_ad')
+def handle_remove_ad(message):
+    try:
+        photo_number = int(message.text)
+        username = message.from_user.username if message.from_user.username else 'unknown_user'
+        user_dir = os.path.join('user_photos', username)
+
+        if os.path.exists(user_dir):
+            files = sorted([f for f in os.listdir(user_dir) if os.path.isfile(os.path.join(user_dir, f))])
+            if 0 < photo_number <= len(files):
+                os.remove(os.path.join(user_dir, files[photo_number-1]))
+                bot.reply_to(message, f"Фото #{photo_number} удалено.")
+            else:
+                bot.reply_to(message, "Фото с таким номером не найдено. Попробуйте еще раз.")
+        else:
+            bot.reply_to(message, "У вас нет сохраненных фото.")
+
+    except ValueError:
+        bot.reply_to(message, "Пожалуйста, введите корректный номер фото.")
+    
+    finally:
+        if message.chat.id in user_data:
+            del user_data[message.chat.id]
+
 @bot.message_handler(func=lambda message: 'command' in user_data.get(message.chat.id, {}) and user_data[message.chat.id]['command'] == 'glue', content_types=['photo'])
 def handle_glue_photo(message):
     file_info = bot.get_file(message.photo[-1].file_id)
